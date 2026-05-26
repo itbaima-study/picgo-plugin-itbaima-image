@@ -49,10 +49,10 @@ const UA = `PicGo-${ID}`
 const BASE_API_URL = 'https://oss.itbaima.cn/api/v2'
 const UPLOAD_API_URL = `${BASE_API_URL}/upload`
 const DELETE_API_URL = `${BASE_API_URL}/delete`
-const WEB_URL = 'https://www.itbaima.cn/space/cloud'
+const WEB_URL = 'https://www.itbaima.cn/space/storage'
 
 const localesZH = {
-  NAME: '栢码云',
+  NAME: '柏码',
   TOKEN_NAME: 'API 密钥',
   MSG_TOKEN_NEED_CONFIG: '请先配置 API 密钥',
   HEADER_ACCEPT_LANGUAGE: 'zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7',
@@ -200,10 +200,10 @@ async function uploadHandler(ctx) {
     const { fileName, buffer, base64Image } = imgInfo
     const img = buffer ?? Buffer.from(base64Image)
     // TODO 限制上传大小
-    const { message } = await uploadImage(ctx, apiToken, fileName, img)
-    imgInfo.fileName = message.id
-    imgInfo.url = message.url
-    imgInfo.imgUrl = message.mini_url
+    const { data } = await uploadImage(ctx, apiToken, fileName, img)
+    imgInfo.fileName = data.id
+    imgInfo.url = data.url
+    imgInfo.imgUrl = data.mini_url
     delete imgInfo.base64Image
     delete imgInfo.buffer
     await sleep(100)
