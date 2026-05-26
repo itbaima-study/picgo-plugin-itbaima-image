@@ -15,32 +15,29 @@
 /**
  * 基本返回结构
  * @typedef {Object} BaseResponse
- * @property {boolean} success - 请求是否成果
+ * @property {boolean} success - 请求是否成功
  * @property {number} status - 状态码
- * @property {*} [message] - 返回信息和数据
+ * @property {*} [data] - 返回数据
+ * @property {*} [message] - 返回信息
  */
 
 /**
  * 上传请求的返回数据结构
- * @typedef {Object} UploadResponseMessage
+ * @typedef {Object} UploadResponseData
  * @property {string} id - 图片名称/编号
  * @property {string} url - 图片地址
  * @property {string} mini_url - 缩略图片地址
- * @property {number} size - 图片大小
- * @property {string} time - 存储时间
- * @property {string} delete_url - 图片删除地址
  */
 
 /**
  * 上传请求的返回结构
  * @typedef {BaseResponse} UploadResponse
- * @property {UploadResponseMessage} message - 返回信息和数据
+ * @property {UploadResponseData} data - 返回数据
  */
 
 /**
  * 删除请求的返回结构
  * @typedef {BaseResponse} DeleteResponse
- * @property {string} message - 返回信息
  */
 
 const ID = 'itbaima_v2'
@@ -74,27 +71,23 @@ const localesEN = {
   MSG_OPEN_IN_BROWSER: 'Open in browser',
 }
 
-/**
- * i18n
- * @param {IPicGo} ctx
- * @param {string} key
- * @returns
- */
-function t(ctx, key) { return ctx.i18n.translate(key) }
+/** 获取国际化文案 */
+function t(ctx, key) {
+  return ctx.i18n.translate(key)
+}
 
-/**
- * 获取存储的配置
- * @param {IPicGo} ctx
- * @returns {PluginConfig}
- */
+/** 获取存储的配置 */
 function getConfig(ctx) {
-  return ctx.getConfig(SETTINGS_NAME) ?? {
-    apiToken: ''
-  }
+  return (
+    ctx.getConfig(SETTINGS_NAME) ??
+    ctx.uploaderConfig?.getActiveConfig?.(ID) ?? {
+      apiToken: '',
+    }
+  )
 }
 
 /**
- * 获取配置信息
+ * 获取 PicGo 配置表单
  * @param {IPicGo} ctx
  * @returns{IPluginConfig[]}
  */
@@ -104,8 +97,12 @@ function uploadConfig(ctx) {
     {
       name: 'apiToken',
       type: 'input',
-      get alias() { return t(ctx, 'TOKEN_NAME') },
-      get message() { return t(ctx, 'TOKEN_NAME') },
+      get alias() {
+        return t(ctx, 'TOKEN_NAME')
+      },
+      get message() {
+        return t(ctx, 'TOKEN_NAME')
+      },
       default: config.apiToken || '',
       required: true,
     },
@@ -113,35 +110,25 @@ function uploadConfig(ctx) {
 }
 
 /**
- * 检查配置
+ * 获取可用配置
  * @param {IPicGo} ctx
- * @param {PluginConfig} config
- * @returns{boolean}
+ * @returns {PluginConfig|undefined}
  */
-function checkConfig(ctx, config) {
-  const { apiToken } = config
-  if (apiToken && apiToken.trim() !== '') {
-    return true
-  }
+function getValidConfig(ctx) {
+  const config = getConfig(ctx)
+  if (config.apiToken?.trim()) return config
+
   ctx.emit('notification', {
     title: t(ctx, 'MSG_TOKEN_NEED_CONFIG'),
   })
-  return false
 }
 
-/**
- * 睡眠
- * @param ms - 睡眠的时间(毫秒)
- * @returns{Promise<void>}
- */
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+/** 等待指定时间 */
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
-/**
- * 请求头
- * @param {IPicGo} ctx
- * @param {string} apiToken
- * @returns
- */
+/** 创建接口请求头 */
 function getHeaders(ctx, apiToken) {
   return {
     'Accept-Language': t(ctx, 'HEADER_ACCEPT_LANGUAGE'),
@@ -155,10 +142,10 @@ function getHeaders(ctx, apiToken) {
  * @param {IPicGo} ctx
  * @param {string} apiToken
  * @param {string} filename
- * @param {IImgInfo} imgInfo
+ * @param {Buffer} imgBuf
  * @returns {Promise<UploadResponse>}
  */
-async function uploadImage(ctx, apiToken, filename, imgInfo) {
+async function uploadImage(ctx, apiToken, filename, imgBuf) {
   try {
     const response = await ctx.request({
       url: UPLOAD_API_URL,
@@ -166,21 +153,21 @@ async function uploadImage(ctx, apiToken, filename, imgInfo) {
       headers: getHeaders(ctx, apiToken),
       formData: {
         file: {
-          value: imgInfo,
+          value: imgBuf,
           options: { filename },
         },
         ssl: 'true',
       },
       json: true,
     })
-    if (response?.success) return response
+    if (response?.success && response.data) return response
     throw response
   } catch (e) {
     let errorMessage = `${filename} ${t(ctx, 'MSG_UPLOAD_ERROR')} `
     if (e?.response?.status === 413) {
       errorMessage += t(ctx, 'MSG_FILE_TOO_LARGE')
     } else {
-      errorMessage += (e?.message ?? t(ctx, 'MSG_UNKNOWN_ERROR'))
+      errorMessage += e?.message ?? t(ctx, 'MSG_UNKNOWN_ERROR')
     }
     throw new Error(errorMessage, { cause: e })
   }
@@ -192,18 +179,19 @@ async function uploadImage(ctx, apiToken, filename, imgInfo) {
  * @returns
  */
 async function uploadHandler(ctx) {
-  const config = getConfig(ctx)
-  if (!checkConfig(ctx, config)) return
+  const config = getValidConfig(ctx)
+  if (!config) return
+
   const { apiToken } = config
-  const imgList = ctx.output
-  for (const imgInfo of imgList) {
+  for (const imgInfo of ctx.output) {
     const { fileName, buffer, base64Image } = imgInfo
     const img = buffer ?? Buffer.from(base64Image)
-    // TODO 限制上传大小
     const { data } = await uploadImage(ctx, apiToken, fileName, img)
     imgInfo.fileName = data.id
+    // PicGo GUI 相册使用 imgUrl 预览，复制模板优先使用 url。
     imgInfo.url = data.url
     imgInfo.imgUrl = data.mini_url
+    imgInfo.miniUrl = data.mini_url
     delete imgInfo.base64Image
     delete imgInfo.buffer
     await sleep(100)
@@ -240,22 +228,31 @@ async function deleteImage(ctx, apiToken, id) {
  * @returns
  */
 async function deleteHandler(ctx, imgList) {
-  const config = getConfig(ctx)
-  if (!checkConfig(ctx, config)) return
+  const config = getValidConfig(ctx)
+  if (!config) return
+
   const { apiToken } = config
-  const imgInfos = imgList.filter(({ type }) => type === ID)
-  for (const { fileName } of imgInfos) {
+  for (const { fileName } of imgList.filter(({ type }) => type === ID)) {
     await deleteImage(ctx, apiToken, fileName)
     await sleep(200)
   }
 }
 
-function openBrowser(url) {
+/**
+ * 打开网页
+ * @param {IPicGo} ctx
+ * @param {string} url
+ */
+async function openBrowser(ctx, url) {
+  if (ctx.openUrl) {
+    await ctx.openUrl(url)
+    return
+  }
   const { exec } = require('child_process')
   const platform = require('os').platform()
   if (platform === 'win32') {
     exec(`start ${url}`)
-  } else if (process.platform === 'darwin') {
+  } else if (platform === 'darwin') {
     exec(`open ${url}`)
   } else {
     exec(`xdg-open ${url}`)
@@ -270,7 +267,7 @@ function guiMenu(ctx) {
   return [
     {
       label: t(ctx, 'MSG_OPEN_IN_BROWSER'),
-      handle: () => openBrowser(WEB_URL),
+      handle: () => openBrowser(ctx, WEB_URL),
     },
   ]
 }
@@ -284,7 +281,9 @@ function main(ctx) {
     ctx.i18n.addLocale('zh-CN', localesZH)
     ctx.i18n.addLocale('en', localesEN)
     ctx.helper.uploader.register(ID, {
-      get name() { return t(ctx, 'NAME') },
+      get name() {
+        return t(ctx, 'NAME')
+      },
       handle: uploadHandler,
       config: uploadConfig,
     })
