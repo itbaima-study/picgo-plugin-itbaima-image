@@ -1,6 +1,6 @@
 {
   "name": "picgo-plugin-itbaima-image",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "栢码知识之海图床 PicGo 插件",
   "type": "commonjs",
   "main": "main.js",
@@ -13,8 +13,8 @@
     "picgo-gui-plugin",
     "picgo-plugin"
   ],
-  "author": "FlapyPan",
+  "author": "blyrin",
   "devDependencies": {
-    "picgo": "^1.5.7"
+    "picgo": "^2.0.3"
   }
 }
