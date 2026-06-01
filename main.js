@@ -188,10 +188,7 @@ async function uploadHandler(ctx) {
     const img = buffer ?? Buffer.from(base64Image)
     const { data } = await uploadImage(ctx, apiToken, fileName, img)
     imgInfo.fileName = data.id
-    // PicGo GUI 相册使用 imgUrl 预览，复制模板优先使用 url。
-    imgInfo.url = data.url
-    imgInfo.imgUrl = data.mini_url
-    imgInfo.miniUrl = data.mini_url
+    imgInfo.imgUrl = data.url
     delete imgInfo.base64Image
     delete imgInfo.buffer
     await sleep(100)
